@@ -55,6 +55,9 @@ class ControlsFlyer(UnityDrone):
                  self.position_trajectory,
                  self.yaw_trajectory,
                  self.time_trajectory, time.time())
+
+        # TODO Testing only: Override local positon target in order to unit test
+        self.local_position_target = np.array([0.0, 0.0, -3.0])
         self.attitude_target = np.array((0.0, 0.0, yaw_cmd))
         acceleration_cmd = self.controller.lateral_position_control(
                 self.local_position_target[0:2],

@@ -7,6 +7,7 @@ components:
     waypoint following
 """
 import numpy as np
+import math
 from frame_utils import euler2RM
 
 DRONE_MASS_KG = 0.5
@@ -19,6 +20,24 @@ class NonlinearController(object):
 
     def __init__(self):
         """Initialize the controller object and control gains"""
+        self.z_k_p = 1.0
+        self.z_k_d = 1.0
+        self.x_k_p = 1.0
+        self.x_k_d = 1.0
+        self.y_k_p = 1.0
+        self.y_k_d = 1.0
+        self.k_p_roll = 1.0
+        self.k_p_pitch = 1.0
+        self.k_p_yaw = 1.0
+        self.k_p_p = 1.0
+        self.k_p_q = 1.0
+        self.k_p_r = 1.0
+
+        print('x: delta = %5.3f' % (self.x_k_d / 2 / math.sqrt(self.x_k_p)), ' omega_n = %5.3f' % (math.sqrt(self.x_k_p)))
+        print('y: delta = %5.3f' % (self.y_k_d / 2 / math.sqrt(self.y_k_p)), ' omega_n = %5.3f' % (math.sqrt(self.y_k_p)))
+        print('z: delta = %5.3f' % (self.z_k_d / 2 / math.sqrt(self.z_k_p)), ' omega_n = %5.3f' % (math.sqrt(self.z_k_p)))
+
+        self.g = 9.81
         return    
 
     def trajectory_control(self, position_trajectory, yaw_trajectory, time_trajectory, current_time):
@@ -95,7 +114,19 @@ class NonlinearController(object):
             
         Returns: thrust command for the vehicle (+up)
         """
-        return 0.0
+        z_err = altitude_cmd - altitude
+        z_err_dot = vertical_velocity_cmd - vertical_velocity
+        rot_mat = self.attitude_to_rot_mat(attitude)
+        b_z = rot_mat[2, 2]
+
+        p_term = self.z_k_p * z_err
+        d_term = self.z_k_d * z_err_dot
+
+        u_1_bar = p_term + d_term + acceleration_ff
+
+        c = (u_1_bar - self.g) / b_z
+
+        return c
         
     
     def roll_pitch_controller(self, acceleration_cmd, attitude, thrust_cmd):
@@ -119,7 +150,18 @@ class NonlinearController(object):
             
         Returns: 3-element numpy array, desired roll moment, pitch moment, and yaw moment commands in Newtons*meters
         """
-        return np.array([0.0, 0.0, 0.0])
+        (p_c, q_c, r_c) = body_rate_cmd
+        (p_actual, q_actual, r_actual) = body_rate
+        p_err = p_c - p_actual
+        u_bar_p = self.k_p_p * p_err
+
+        q_err = q_c - q_actual
+        u_bar_q = self.k_p_q * q_err
+
+        r_err = r_c - r_actual
+        u_bar_r = self.k_p_r * r_err
+
+        return u_bar_p, u_bar_q, u_bar_r
     
     def yaw_control(self, yaw_cmd, yaw):
         """ Generate the target yawrate
@@ -130,5 +172,15 @@ class NonlinearController(object):
         
         Returns: target yawrate in radians/sec
         """
-        return 0.0
-    
+        psi_err = yaw_cmd - yaw
+        r_c = self.k_p_yaw * psi_err
+
+        return r_c
+
+    @staticmethod
+    def attitude_to_rot_mat(attitude):
+        (phi, theta, psi) = attitude
+        euler_rot_mat = np.array([[1, math.sin(phi) * math.tan(theta), math.cos(phi) * math.tan(theta)],
+                                  [0, math.cos(phi), -math.sin(phi)],
+                                  [0, math.sin(phi) / math.cos(theta), math.cos(phi) / math.cos(theta)]])
+        return euler_rot_mat
